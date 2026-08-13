@@ -348,6 +348,49 @@
           boot_ip={{ cluster_boot_ip | default('N/A') }},
           ochami_url={{ ochami_base_url | default('N/A') }}
 
+    # --- Load network_spec.yml for template rendering ---
+    # The coredhcp.yaml.j2 template directly references network_data.admin_network
+    # (dynamic_range, netmask_bits) and additional_subnets. The Corefile.j2 template
+    # needs dns_forwarders which may be overridden from network_spec. network_data
+    # is only populated inside the "Regenerate configs_vars.yaml" block above
+    # (which is skipped when configs_vars.yaml already exists — the normal path).
+    # Load network_spec.yml unconditionally here so templates always have the data.
+    - name: Load network_spec.yml for template variables
+      when:
+        - cluster_config_available | default(false) | bool
+        - network_data is not defined
+      block:
+        - name: Check if network_spec.yml exists for template rendering
+          ansible.builtin.stat:
+            path: "{{ network_spec_path }}"
+          register: template_network_spec_stat
+
+        - name: Load network_spec.yml variables
+          ansible.builtin.include_vars:
+            file: "{{ network_spec_path }}"
+          when: template_network_spec_stat.stat.exists
+
+        - name: Parse network_spec data for template rendering
+          ansible.builtin.set_fact:
+            network_data: "{{ network_data | default({}) | combine({item.key: item.value}) }}"
+          with_dict: "{{ Networks }}"
+          when: template_network_spec_stat.stat.exists and Networks is defined
+
+    - name: Set additional_subnets from network_data
+      ansible.builtin.set_fact:
+        additional_subnets: "{{ network_data.admin_network.additional_subnets | default([]) }}"
+      when:
+        - network_data is defined
+        - network_data.admin_network is defined
+
+    - name: Override DNS forwarders from network_spec if configured
+      ansible.builtin.set_fact:
+        dns_forwarders: "{{ network_data.admin_network.dns }}"
+      when:
+        - network_data is defined
+        - network_data.admin_network is defined
+        - (network_data.admin_network.dns | default([])) | length > 0
+
     # --- Deploy configs if we have cluster info ---
     - name: Deploy updated CoreDNS Corefile
       ansible.builtin.template:
