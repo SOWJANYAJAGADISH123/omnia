@@ -14,264 +14,45 @@
 ---
 # precheck_build_stream — Main task file
 #
-# build_stream depends on three prerequisite domains having completed
-# their validate + credentials + prepare lifecycle:
-#   - repo_manager    (containers + config + credentials + repo_status.yml)
-#   - image_build_manager (containers + config + credentials + build_status.yml)
-#   - orchestrator    (output directory + orchestrator_status.yml)
-#
-# This role checks:
-#   1. omnia.sh setup completed (/etc/omnia/omnia.env exists)
-#   2. Required environment variables are set
-#   3. IP address is configured on a local interface
-#   4. Hostname and domain match system state
-#   5. OMNIA_DATA_PATH directory exists
-#   6. repo_manager: validate + credentials + prepare completed
-#   7. image_build_manager: validate + credentials + prepare completed
-#   8. orchestrator: prepare completed
-#   9. build_stream own config and credentials exist
+# build_stream requires repo_manager, image_build_manager, and orchestrator
+# to have completed validate + credentials + prepare.
+# Instead of checking each domain individually, we invoke
+# ./omnia.sh --prepare-base which runs the full lifecycle for all three
+# prerequisite domains in the correct dependency order.
 
 # =========================================================================
-# Step 1: Verify omnia.sh has been run
+# Step 1: Verify omnia.sh exists
 # =========================================================================
-- name: Check if omnia.env is installed system-wide
+- name: Verify omnia.sh exists
   ansible.builtin.stat:
-    path: "{{ system_env_file }}"
-  register: _omnia_env_check
+    path: "{{ omnia_sh_path }}"
+  register: _omnia_sh_check
+
+- name: Fail if omnia.sh is not found
+  ansible.builtin.fail:
+    msg: >-
+      omnia.sh not found at {{ omnia_sh_path }}.
+      Set OMNIA_SRC_PATH or run from the omnia source tree.
+  when: not _omnia_sh_check.stat.exists
 
 # =========================================================================
-# Step 2: Validate required environment variables
+# Step 2: Run omnia.sh --prepare-base
 # =========================================================================
-- name: Identify missing environment variables
-  ansible.builtin.set_fact:
-    _env_missing: >-
-      {{ required_env_vars |
-         selectattr('value', 'equalto', '') |
-         map(attribute='name') | list }}
-
-# =========================================================================
-# Step 3: Validate IP address on a local interface
-# =========================================================================
-- name: Get IP addresses on local interfaces
-  ansible.builtin.command: hostname -I
-  register: _host_ips
+- name: Run omnia.sh --prepare-base (validate + credentials + prepare for prerequisite domains)
+  ansible.builtin.command:
+    cmd: "bash {{ omnia_sh_path }} --prepare-base"
+  register: _prepare_base_result
   changed_when: false
   failed_when: false
 
-- name: Check if SYSTEM_ADMIN_NIC_IPV4 is on a local interface
-  ansible.builtin.set_fact:
-    _ip_configured: "{{ system_admin_nic_ipv4 in (_host_ips.stdout | default('')) }}"
-  when: system_admin_nic_ipv4 | length > 0
-
-# =========================================================================
-# Step 4: Validate hostname and domain
-# =========================================================================
-- name: Get system hostname
-  ansible.builtin.command: hostname -s
-  register: _actual_hostname
-  changed_when: false
-  failed_when: false
-
-- name: Check hostname matches SYSTEM_HOSTNAME
-  ansible.builtin.set_fact:
-    _hostname_match: "{{ _actual_hostname.stdout | default('') == system_hostname }}"
-  when: system_hostname | length > 0
-
-- name: Get system domain name
-  ansible.builtin.command: hostname -d
-  register: _actual_domain
-  changed_when: false
-  failed_when: false
-
-- name: Check domain matches SYSTEM_DOMAIN_NAME
-  ansible.builtin.set_fact:
-    _domain_match: "{{ _actual_domain.stdout | default('') == system_domain_name }}"
-  when: system_domain_name | length > 0
-
-# =========================================================================
-# Step 5: Validate OMNIA_DATA_PATH directory exists
-# =========================================================================
-- name: Check OMNIA_DATA_PATH directory exists
-  ansible.builtin.stat:
-    path: "{{ omnia_data_path }}"
-  register: _data_path_check
-
-# =========================================================================
-# Step 6: repo_manager — validate + credentials + prepare
-# =========================================================================
-- name: Check repo_manager config (validate proof)
-  ansible.builtin.stat:
-    path: "{{ repo_manager_config_file }}"
-  register: _rm_config_check
-
-- name: Check repo_manager credentials (credentials proof)
-  ansible.builtin.stat:
-    path: "{{ repo_manager_credential_file }}"
-  register: _rm_cred_check
-
-- name: Check repo_manager containers are running (prepare proof)
-  ansible.builtin.command: "podman ps --filter name={{ item.name }} --format '{{ '{{' }}.Names{{ '}}' }}'"
-  register: _rm_container_checks
-  changed_when: false
-  failed_when: false
-  loop: "{{ repo_manager_containers }}"
-  loop_control:
-    label: "{{ item.name }}"
-
-- name: Check repo_manager output (prepare/status proof)
-  ansible.builtin.stat:
-    path: "{{ repo_manager_status_file }}"
-  register: _rm_status_check
-
-# =========================================================================
-# Step 7: image_build_manager — validate + credentials + prepare
-# =========================================================================
-- name: Check image_build_manager config (validate proof)
-  ansible.builtin.stat:
-    path: "{{ image_build_config_file }}"
-  register: _ibm_config_check
-
-- name: Check image_build_manager credentials (credentials proof)
-  ansible.builtin.stat:
-    path: "{{ image_build_credential_file }}"
-  register: _ibm_cred_check
-
-- name: Check image_build_manager containers are running (prepare proof)
-  ansible.builtin.command: "podman ps --filter name={{ item.name }} --format '{{ '{{' }}.Names{{ '}}' }}'"
-  register: _ibm_container_checks
-  changed_when: false
-  failed_when: false
-  loop: "{{ image_build_manager_containers }}"
-  loop_control:
-    label: "{{ item.name }}"
-
-- name: Check image_build_manager output (build proof)
-  ansible.builtin.stat:
-    path: "{{ image_build_status_file }}"
-  register: _ibm_status_check
-
-# =========================================================================
-# Step 8: orchestrator — prepare
-# =========================================================================
-- name: Check orchestrator output directory (prepare proof)
-  ansible.builtin.stat:
-    path: "{{ orchestrator_output_dir }}"
-  register: _orch_output_check
-
-- name: Check orchestrator status file
-  ansible.builtin.stat:
-    path: "{{ orchestrator_status_file }}"
-  register: _orch_status_check
-
-# =========================================================================
-# Step 9: build_stream own config and credentials
-# =========================================================================
-- name: Check build_stream_config.yml exists
-  ansible.builtin.stat:
-    path: "{{ bs_config_file }}"
-  register: _bs_config_check
-
-- name: Check build_stream_credentials.yml exists
-  ansible.builtin.stat:
-    path: "{{ bs_credential_file }}"
-  register: _bs_cred_check
-
-# =========================================================================
-# Step 10: Build summary
-# =========================================================================
-- name: Build container check results
-  ansible.builtin.set_fact:
-    _all_container_checks: "{{ _rm_container_checks.results + _ibm_container_checks.results }}"
-
-- name: Identify running and missing containers
-  ansible.builtin.set_fact:
-    _missing_containers: >-
-      {{ _all_container_checks
-         | selectattr('stdout', 'equalto', '')
-         | map(attribute='item')
-         | map(attribute='name')
-         | list }}
-    _running_containers: >-
-      {{ _all_container_checks
-         | rejectattr('stdout', 'equalto', '')
-         | map(attribute='item')
-         | map(attribute='name')
-         | list }}
-
-- name: Determine domain readiness
-  ansible.builtin.set_fact:
-    _rm_ready: >-
-      {{ _rm_config_check.stat.exists
-         and _rm_cred_check.stat.exists
-         and (_rm_container_checks.results | rejectattr('stdout', 'equalto', '') | list | length == repo_manager_containers | length)
-         and _rm_status_check.stat.exists }}
-    _ibm_ready: >-
-      {{ _ibm_config_check.stat.exists
-         and _ibm_cred_check.stat.exists
-         and (_ibm_container_checks.results | rejectattr('stdout', 'equalto', '') | list | length == image_build_manager_containers | length)
-         and _ibm_status_check.stat.exists }}
-    _orch_ready: >-
-      {{ _orch_output_check.stat.exists
-         and _orch_status_check.stat.exists }}
-
-- name: Determine overall precheck result
-  ansible.builtin.set_fact:
-    _precheck_pass: >-
-      {{ _omnia_env_check.stat.exists
-         and (_env_missing | length == 0)
-         and (_ip_configured | default(true) | bool)
-         and (_hostname_match | default(true) | bool)
-         and (_domain_match | default(true) | bool)
-         and _data_path_check.stat.exists
-         and (_rm_ready | bool)
-         and (_ibm_ready | bool)
-         and (_orch_ready | bool)
-         and _bs_config_check.stat.exists
-         and _bs_cred_check.stat.exists }}
-
-- name: Precheck summary
+- name: Display prepare-base output
   ansible.builtin.debug:
-    msg:
-      - "============================================"
-      - "  BUILD_STREAM PRECHECK SUMMARY"
-      - "============================================"
-      - "  omnia.env installed:           {{ _omnia_env_check.stat.exists | ternary('YES', 'NO') }}"
-      - "  env vars missing:             {{ (_env_missing | length == 0) | ternary('none', _env_missing | join(', ')) }}"
-      - ""
-      - "  --- system validation ---"
-      - "  SYSTEM_ADMIN_NIC_IPV4:         {{ system_admin_nic_ipv4 | default('NOT SET') }}"
-      - "  SYSTEM_HOSTNAME:               {{ system_hostname | default('NOT SET') }}"
-      - "  SYSTEM_DOMAIN_NAME:            {{ system_domain_name | default('NOT SET') }}"
-      - "  OMNIA_DATA_PATH:               {{ omnia_data_path }}"
-      - "  IP on local interface:         {{ (_ip_configured | default(true) | bool) | ternary('YES', 'MISMATCH') }}"
-      - "  hostname matches:              {{ (_hostname_match | default(true) | bool) | ternary('YES', 'MISMATCH') }}"
-      - "  domain matches:                {{ (_domain_match | default(true) | bool) | ternary('YES', 'MISMATCH') }}"
-      - "  data path exists:              {{ _data_path_check.stat.exists | ternary('YES', 'NO') }}"
-      - ""
-      - "  --- repo_manager (prerequisite) ---"
-      - "  config:                        {{ _rm_config_check.stat.exists | ternary('present', 'MISSING — run --tags validate') }}"
-      - "  credentials:                   {{ _rm_cred_check.stat.exists | ternary('present', 'MISSING — run --tags credentials') }}"
-      - "  omnia_pulp container:          {{ ('omnia_pulp' in _running_containers) | ternary('RUNNING', 'NOT RUNNING — run --tags prepare') }}"
-      - "  omnia_minio container:         {{ ('omnia_minio' in _running_containers) | ternary('RUNNING', 'NOT RUNNING — run --tags prepare') }}"
-      - "  repo_status.yml:              {{ _rm_status_check.stat.exists | ternary('present', 'MISSING — run --tags download,status') }}"
-      - "  domain ready:                  {{ _rm_ready | bool | ternary('YES', 'NO') }}"
-      - ""
-      - "  --- image_build_manager (prerequisite) ---"
-      - "  config:                        {{ _ibm_config_check.stat.exists | ternary('present', 'MISSING — run --tags validate') }}"
-      - "  credentials:                   {{ _ibm_cred_check.stat.exists | ternary('present', 'MISSING — run --tags credentials') }}"
-      - "  omnia_registry container:      {{ ('omnia_registry' in _running_containers) | ternary('RUNNING', 'NOT RUNNING — run --tags prepare') }}"
-      - "  build_status.yml:             {{ _ibm_status_check.stat.exists | ternary('present', 'MISSING — run --tags build') }}"
-      - "  domain ready:                  {{ _ibm_ready | bool | ternary('YES', 'NO') }}"
-      - ""
-      - "  --- orchestrator (prerequisite) ---"
-      - "  output directory:              {{ _orch_output_check.stat.exists | ternary('present', 'MISSING — run orchestrator prepare') }}"
-      - "  orchestrator_status.yml:       {{ _orch_status_check.stat.exists | ternary('present', 'MISSING — run orchestrator provision') }}"
-      - "  domain ready:                  {{ _orch_ready | bool | ternary('YES', 'NO') }}"
-      - ""
-      - "  --- build_stream (self) ---"
-      - "  build_stream_config.yml:       {{ _bs_config_check.stat.exists | ternary('present', 'MISSING') }}"
-      - "  build_stream_credentials.yml:  {{ _bs_cred_check.stat.exists | ternary('present', 'MISSING') }}"
-      - ""
-      - "  ============================================"
-      - "  RESULT: {{ _precheck_pass | bool | ternary('PASS', 'FAIL — fix items above before running build_stream') }}"
-      - "  ============================================"
+    msg: "{{ _prepare_base_result.stdout_lines }}"
+  when: _prepare_base_result.stdout_lines | length > 0
+
+- name: Fail if prepare-base failed
+  ansible.builtin.fail:
+    msg: >-
+      omnia.sh --prepare-base failed (exit code: {{ _prepare_base_result.rc }}).
+      Fix the errors above and re-run: ansible-playbook build_stream.yml --tags precheck
+  when: _prepare_base_result.rc != 0

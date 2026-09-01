@@ -15,80 +15,11 @@
 # ============================================================================
 # precheck_build_stream — Role Variables
 # ============================================================================
-# Validates that ALL prerequisite domains (repo_manager, image_build_manager,
-# orchestrator) have completed validate + credentials + prepare before
-# build_stream can run.
+# build_stream depends on repo_manager, image_build_manager, and orchestrator
+# having completed their validate + credentials + prepare lifecycle.
+# The precheck simply invokes ./omnia.sh --prepare-base which handles all of
+# that in the correct dependency order.
 
-# System env file installed by omnia.sh --setup-venv
-system_env_file: "/etc/omnia/omnia.env"
-
-# Resolved environment variables
-omnia_data_path: "{{ lookup('env', 'OMNIA_DATA_PATH') | default('/opt/omnia', true) }}"
-system_admin_nic_ipv4: "{{ lookup('env', 'SYSTEM_ADMIN_NIC_IPV4') | default('', true) }}"
-system_hostname: "{{ lookup('env', 'SYSTEM_HOSTNAME') | default('', true) }}"
-system_domain_name: "{{ lookup('env', 'SYSTEM_DOMAIN_NAME') | default('', true) }}"
-omnia_project_name: "{{ lookup('env', 'OMNIA_PROJECT_NAME') | default('project_default', true) }}"
-
-# Required environment variables for build_stream
-required_env_vars:
-  - name: OMNIA_DATA_PATH
-    value: "{{ omnia_data_path }}"
-  - name: SYSTEM_ADMIN_NIC_IPV4
-    value: "{{ system_admin_nic_ipv4 }}"
-  - name: SYSTEM_HOSTNAME
-    value: "{{ system_hostname }}"
-  - name: SYSTEM_DOMAIN_NAME
-    value: "{{ system_domain_name }}"
-  - name: OMNIA_PROJECT_NAME
-    value: "{{ omnia_project_name }}"
-
-# =========================================================================
-# Prerequisite domain: repo_manager (validate + credentials + prepare)
-# =========================================================================
-repo_manager_containers:
-  - name: omnia_pulp
-    description: "Pulp content server"
-  - name: omnia_minio
-    description: "MinIO object store"
-
-# Output written by repo_manager --tags prepare/download/status
-repo_manager_status_file: "{{ omnia_data_path }}/repo_manager/output/{{ omnia_project_name }}/repo_status.yml"
-# Credential file written by repo_manager --tags credentials
-repo_manager_credential_file: "{{ omnia_data_path }}/repo_manager/input/{{ omnia_project_name }}/repo_manager_config_credentials.yml"
-# Config file validated by repo_manager --tags validate
-repo_manager_config_file: "{{ omnia_data_path }}/repo_manager/input/{{ omnia_project_name }}/repo_manager_config.yml"
-
-# =========================================================================
-# Prerequisite domain: image_build_manager (validate + credentials + prepare)
-# =========================================================================
-image_build_manager_containers:
-  - name: omnia_registry
-    description: "Container image registry"
-
-# Output written by image_build_manager --tags build
-image_build_status_file: "{{ omnia_data_path }}/image_build_manager/output/{{ omnia_project_name }}/build_status.yml"
-# Credential file written by image_build_manager --tags credentials
-image_build_credential_file: "{{ omnia_data_path }}/image_build_manager/input/{{ omnia_project_name }}/image_build_credentials.yml"
-# Config file validated by image_build_manager --tags validate
-image_build_config_file: "{{ omnia_data_path }}/image_build_manager/input/{{ omnia_project_name }}/image_build_config.yml"
-
-# =========================================================================
-# Prerequisite domain: orchestrator (validate + credentials + prepare)
-# =========================================================================
-# Output written by orchestrator --tags provision
-orchestrator_status_file: "{{ omnia_data_path }}/orchestrator/output/{{ omnia_project_name }}/orchestrator_status.yml"
-# Output dir created by orchestrator --tags prepare
-orchestrator_output_dir: "{{ omnia_data_path }}/orchestrator/output/{{ omnia_project_name }}"
-
-# =========================================================================
-# build_stream own files
-# =========================================================================
-bs_config_file: "{{ input_project_dir | default(omnia_data_path ~ '/build_stream/input/project_default') }}/build_stream_config.yml"
-bs_credential_file: "{{ input_project_dir | default(omnia_data_path ~ '/build_stream/input/project_default') }}/build_stream_credentials.yml"
-
-# =========================================================================
-# Messages
-# =========================================================================
-precheck_omnia_env_not_installed_msg: >-
-  omnia.env is not installed at {{ system_env_file }}.
-  Run 'omnia.sh --setup-venv' to install it.
+# Path to omnia.sh (resolve from OMNIA_SRC_PATH or derive from role_path)
+omnia_src_path: "{{ lookup('env', 'OMNIA_SRC_PATH') | default((role_path | realpath) ~ '/../../..', true) }}"
+omnia_sh_path: "{{ omnia_src_path }}/main/omnia.sh"

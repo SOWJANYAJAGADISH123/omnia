@@ -13,19 +13,15 @@
 # limitations under the License.
 
 ---
-# precheck_build_stream.yml — Validate environment before running build_stream.
+# precheck_build_stream.yml — Ensure prerequisite domains are ready.
 #
-# Validates:
-#   - omnia.sh setup completed (/etc/omnia/omnia.env exists)
-#   - prepare-base containers running (omnia_pulp, omnia_minio, omnia_registry)
-#   - orchestrator output directory exists
-#   - build_stream_config.yml is present
-#   - build_stream_credentials.yml is present
+# Invokes ./omnia.sh --prepare-base which runs validate + credentials + prepare
+# for repo_manager, image_build_manager, and orchestrator in dependency order.
 #
 # Usage:
 #   ansible-playbook build_stream.yml --tags precheck
 
-- name: Precheck — validate build_stream environment
+- name: Precheck — run prepare-base for prerequisite domains
   hosts: localhost
   connection: local
   gather_facts: false
