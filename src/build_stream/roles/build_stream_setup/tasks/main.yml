@@ -43,8 +43,15 @@
     - not (upgrade_mode | default(false) | bool)
 
 # =====================================================================
-# Step 2: Verify input / output directories
+# Step 2: Set project directories as facts and verify
 # =====================================================================
+- name: Set input_project_dir and output_project_dir as facts
+  ansible.builtin.set_fact:
+    input_project_dir: "{{ input_project_dir }}"
+    output_project_dir: "{{ output_project_dir }}"
+    oim_shared_path: "{{ oim_shared_path }}"
+    cacheable: true
+
 - name: Verify the input project directory exists
   ansible.builtin.stat:
     path: "{{ input_project_dir }}"
