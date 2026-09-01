@@ -15,11 +15,31 @@
 # ============================================================================
 # precheck_build_stream — Role Variables
 # ============================================================================
-# build_stream depends on repo_manager, image_build_manager, and orchestrator
-# having completed their validate + credentials + prepare lifecycle.
-# The precheck simply invokes ./omnia.sh --prepare-base which handles all of
-# that in the correct dependency order.
+# Minimal checks to verify that repo_manager and image_build_manager
+# have completed prepare-base (containers running + credentials present).
 
-# Path to omnia.sh (resolve from OMNIA_SRC_PATH or derive from role_path)
-omnia_src_path: "{{ lookup('env', 'OMNIA_SRC_PATH') | default((role_path | realpath) ~ '/../../..', true) }}"
-omnia_sh_path: "{{ omnia_src_path }}/main/omnia.sh"
+omnia_data_path: "{{ lookup('env', 'OMNIA_DATA_PATH') | default('/opt/omnia', true) }}"
+omnia_project_name: "{{ lookup('env', 'OMNIA_PROJECT_NAME') | default('project_default', true) }}"
+
+# Containers that must be running (deployed by prepare-base)
+required_containers:
+  - name: omnia_pulp
+    domain: repo_manager
+  - name: omnia_minio
+    domain: repo_manager
+  - name: omnia_registry
+    domain: image_build_manager
+
+# Credential files that must exist (created by credentials phase)
+required_credential_files:
+  - path: "{{ omnia_data_path }}/repo_manager/input/{{ omnia_project_name }}/repo_manager_config_credentials.yml"
+    domain: repo_manager
+  - path: "{{ omnia_data_path }}/image_build_manager/input/{{ omnia_project_name }}/image_build_credentials.yml"
+    domain: image_build_manager
+
+# Output files that prove prepare/download completed
+required_output_files:
+  - path: "{{ omnia_data_path }}/repo_manager/output/{{ omnia_project_name }}/repo_status.yml"
+    domain: repo_manager
+  - path: "{{ omnia_data_path }}/image_build_manager/output/{{ omnia_project_name }}/build_status.yml"
+    domain: image_build_manager

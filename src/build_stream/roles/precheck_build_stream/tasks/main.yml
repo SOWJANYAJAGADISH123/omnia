@@ -14,45 +14,106 @@
 ---
 # precheck_build_stream — Main task file
 #
-# build_stream requires repo_manager, image_build_manager, and orchestrator
-# to have completed validate + credentials + prepare.
-# Instead of checking each domain individually, we invoke
-# ./omnia.sh --prepare-base which runs the full lifecycle for all three
-# prerequisite domains in the correct dependency order.
+# Verifies that repo_manager and image_build_manager have completed
+# prepare-base by checking:
+#   1. Required containers are running (omnia_pulp, omnia_minio, omnia_registry)
+#   2. Credential files exist
+#   3. Output/status files exist
 
 # =========================================================================
-# Step 1: Verify omnia.sh exists
+# Step 1: Check required containers are running
 # =========================================================================
-- name: Verify omnia.sh exists
-  ansible.builtin.stat:
-    path: "{{ omnia_sh_path }}"
-  register: _omnia_sh_check
-
-- name: Fail if omnia.sh is not found
-  ansible.builtin.fail:
-    msg: >-
-      omnia.sh not found at {{ omnia_sh_path }}.
-      Set OMNIA_SRC_PATH or run from the omnia source tree.
-  when: not _omnia_sh_check.stat.exists
-
-# =========================================================================
-# Step 2: Run omnia.sh --prepare-base
-# =========================================================================
-- name: Run omnia.sh --prepare-base (validate + credentials + prepare for prerequisite domains)
-  ansible.builtin.command:
-    cmd: "bash {{ omnia_sh_path }} --prepare-base"
-  register: _prepare_base_result
+- name: Check required containers are running
+  ansible.builtin.command: "podman ps --filter name={{ item.name }} --format '{{ '{{' }}.Names{{ '}}' }}'"
+  register: _container_checks
   changed_when: false
   failed_when: false
+  loop: "{{ required_containers }}"
+  loop_control:
+    label: "{{ item.name }}"
 
-- name: Display prepare-base output
+- name: Identify running and missing containers
+  ansible.builtin.set_fact:
+    _running: >-
+      {{ _container_checks.results
+         | rejectattr('stdout', 'equalto', '')
+         | map(attribute='item') | map(attribute='name') | list }}
+    _missing: >-
+      {{ _container_checks.results
+         | selectattr('stdout', 'equalto', '')
+         | map(attribute='item') | map(attribute='name') | list }}
+
+# =========================================================================
+# Step 2: Check credential files exist
+# =========================================================================
+- name: Check credential files exist
+  ansible.builtin.stat:
+    path: "{{ item.path }}"
+  register: _cred_checks
+  loop: "{{ required_credential_files }}"
+  loop_control:
+    label: "{{ item.domain }}"
+
+# =========================================================================
+# Step 3: Check output files exist
+# =========================================================================
+- name: Check output files exist
+  ansible.builtin.stat:
+    path: "{{ item.path }}"
+  register: _output_checks
+  loop: "{{ required_output_files }}"
+  loop_control:
+    label: "{{ item.domain }}"
+
+# =========================================================================
+# Step 4: Summary
+# =========================================================================
+- name: Build credential and output results
+  ansible.builtin.set_fact:
+    _creds_missing: >-
+      {{ _cred_checks.results
+         | selectattr('stat.exists', 'equalto', false)
+         | map(attribute='item') | map(attribute='domain') | list }}
+    _outputs_missing: >-
+      {{ _output_checks.results
+         | selectattr('stat.exists', 'equalto', false)
+         | map(attribute='item') | map(attribute='domain') | list }}
+
+- name: Determine overall result
+  ansible.builtin.set_fact:
+    _precheck_pass: >-
+      {{ (_missing | length == 0)
+         and (_creds_missing | length == 0)
+         and (_outputs_missing | length == 0) }}
+
+- name: Precheck summary
   ansible.builtin.debug:
-    msg: "{{ _prepare_base_result.stdout_lines }}"
-  when: _prepare_base_result.stdout_lines | length > 0
+    msg:
+      - "============================================"
+      - "  BUILD_STREAM PRECHECK SUMMARY"
+      - "============================================"
+      - "  --- containers ---"
+      - "  omnia_pulp:       {{ ('omnia_pulp' in _running) | ternary('RUNNING', 'NOT RUNNING') }}"
+      - "  omnia_minio:      {{ ('omnia_minio' in _running) | ternary('RUNNING', 'NOT RUNNING') }}"
+      - "  omnia_registry:   {{ ('omnia_registry' in _running) | ternary('RUNNING', 'NOT RUNNING') }}"
+      - ""
+      - "  --- credentials ---"
+      - "  repo_manager:     {{ ('repo_manager' not in _creds_missing) | ternary('present', 'MISSING') }}"
+      - "  image_build_mgr:  {{ ('image_build_manager' not in _creds_missing) | ternary('present', 'MISSING') }}"
+      - ""
+      - "  --- output ---"
+      - "  repo_status.yml:  {{ ('repo_manager' not in _outputs_missing) | ternary('present', 'MISSING') }}"
+      - "  build_status.yml: {{ ('image_build_manager' not in _outputs_missing) | ternary('present', 'MISSING') }}"
+      - ""
+      - "  RESULT: {{ _precheck_pass | bool | ternary('PASS', 'FAIL — run omnia.sh --prepare-base first') }}"
+      - "============================================"
 
-- name: Fail if prepare-base failed
+- name: Fail if precheck did not pass
   ansible.builtin.fail:
     msg: >-
-      omnia.sh --prepare-base failed (exit code: {{ _prepare_base_result.rc }}).
-      Fix the errors above and re-run: ansible-playbook build_stream.yml --tags precheck
-  when: _prepare_base_result.rc != 0
+      build_stream precheck failed.
+      Missing containers: {{ _missing | default([]) | join(', ') }}.
+      Missing credentials: {{ _creds_missing | default([]) | join(', ') }}.
+      Missing outputs: {{ _outputs_missing | default([]) | join(', ') }}.
+      Run 'omnia.sh --prepare-base' to fix.
+  when: not (_precheck_pass | bool)

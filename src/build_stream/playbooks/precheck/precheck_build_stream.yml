@@ -13,15 +13,15 @@
 # limitations under the License.
 
 ---
-# precheck_build_stream.yml — Ensure prerequisite domains are ready.
+# precheck_build_stream.yml — Verify prerequisite domains are ready.
 #
-# Invokes ./omnia.sh --prepare-base which runs validate + credentials + prepare
-# for repo_manager, image_build_manager, and orchestrator in dependency order.
+# Checks that repo_manager and image_build_manager have completed
+# prepare-base: containers running, credentials present, outputs exist.
 #
 # Usage:
 #   ansible-playbook build_stream.yml --tags precheck
 
-- name: Precheck — run prepare-base for prerequisite domains
+- name: Precheck — verify prerequisite domains are ready
   hosts: localhost
   connection: local
   gather_facts: false

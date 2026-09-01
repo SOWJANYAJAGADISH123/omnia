@@ -15,9 +15,9 @@
 galaxy_info:
   role_name: precheck_build_stream
   description: >-
-    Precheck for build_stream domain — runs omnia.sh --prepare-base
-    to ensure repo_manager, image_build_manager, and orchestrator
-    have completed validate + credentials + prepare.
+    Precheck for build_stream domain — verifies repo_manager and
+    image_build_manager containers are running, credentials are
+    present, and output files exist.
   author: Dell Inc.
   license: Apache-2.0
   min_ansible_version: "2.17"
