@@ -16,9 +16,8 @@
 #
 # Verifies that repo_manager and image_build_manager have completed
 # prepare-base by checking:
-#   1. Required containers are running (omnia_pulp, omnia_minio, omnia_registry)
+#   1. Required containers are running (pulp, minio-server, registry)
 #   2. Credential files exist
-#   3. Output/status files exist
 
 # =========================================================================
 # Step 1: Check required containers are running
@@ -54,37 +53,21 @@
   loop_control:
     label: "{{ item.domain }}"
 
-# =========================================================================
-# Step 3: Check output files exist
-# =========================================================================
-- name: Check output files exist
-  ansible.builtin.stat:
-    path: "{{ item.path }}"
-  register: _output_checks
-  loop: "{{ required_output_files }}"
-  loop_control:
-    label: "{{ item.domain }}"
-
-# =========================================================================
-# Step 4: Summary
-# =========================================================================
-- name: Build credential and output results
+- name: Identify missing credentials
   ansible.builtin.set_fact:
     _creds_missing: >-
       {{ _cred_checks.results
          | selectattr('stat.exists', 'equalto', false)
          | map(attribute='item') | map(attribute='domain') | list }}
-    _outputs_missing: >-
-      {{ _output_checks.results
-         | selectattr('stat.exists', 'equalto', false)
-         | map(attribute='item') | map(attribute='domain') | list }}
 
+# =========================================================================
+# Step 3: Summary
+# =========================================================================
 - name: Determine overall result
   ansible.builtin.set_fact:
     _precheck_pass: >-
       {{ (_missing | length == 0)
-         and (_creds_missing | length == 0)
-         and (_outputs_missing | length == 0) }}
+         and (_creds_missing | length == 0) }}
 
 - name: Precheck summary
   ansible.builtin.debug:
@@ -101,10 +84,6 @@
       - "  repo_manager:     {{ ('repo_manager' not in _creds_missing) | ternary('present', 'MISSING') }}"
       - "  image_build_mgr:  {{ ('image_build_manager' not in _creds_missing) | ternary('present', 'MISSING') }}"
       - ""
-      - "  --- output ---"
-      - "  repo_status.yml:  {{ ('repo_manager' not in _outputs_missing) | ternary('present', 'MISSING') }}"
-      - "  build_status.yml: {{ ('image_build_manager' not in _outputs_missing) | ternary('present', 'MISSING') }}"
-      - ""
       - "  RESULT: {{ _precheck_pass | bool | ternary('PASS', 'FAIL — run omnia.sh --prepare-base first') }}"
       - "============================================"
 
@@ -114,6 +93,5 @@
       build_stream precheck failed.
       Missing containers: {{ _missing | default([]) | join(', ') }}.
       Missing credentials: {{ _creds_missing | default([]) | join(', ') }}.
-      Missing outputs: {{ _outputs_missing | default([]) | join(', ') }}.
       Run 'omnia.sh --prepare-base' to fix.
   when: not (_precheck_pass | bool)

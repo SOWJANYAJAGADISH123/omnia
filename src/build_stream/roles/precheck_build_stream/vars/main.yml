@@ -37,9 +37,3 @@ required_credential_files:
   - path: "{{ omnia_data_path }}/image_build_manager/input/{{ omnia_project_name }}/image_build_credentials.yml"
     domain: image_build_manager
 
-# Output files that prove prepare/download completed
-required_output_files:
-  - path: "{{ omnia_data_path }}/repo_manager/output/{{ omnia_project_name }}/repo_status.yml"
-    domain: repo_manager
-  - path: "{{ omnia_data_path }}/image_build_manager/output/{{ omnia_project_name }}/build_status.yml"
-    domain: image_build_manager
