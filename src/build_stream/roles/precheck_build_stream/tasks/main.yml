@@ -1,0 +1,145 @@
+# Copyright 2026 Dell Inc. or its subsidiaries. All Rights Reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+---
+# precheck_build_stream — Main task file
+#
+# Verifies that the prepare-base infrastructure has been deployed:
+#   1. omnia.sh setup completed (/etc/omnia/omnia.env exists)
+#   2. repo_manager containers running (omnia_pulp, omnia_minio)
+#   3. image_build_manager containers running (omnia_registry)
+#   4. Orchestrator-related services reachable
+#   5. build_stream_config.yml exists and is filled
+#   6. build_stream_credentials.yml exists
+#   7. Print precheck summary
+
+# =========================================================================
+# Step 1: Verify omnia.sh has been run (system env file exists)
+# =========================================================================
+- name: Check if omnia.env is installed system-wide
+  ansible.builtin.stat:
+    path: "{{ system_env_file }}"
+  register: _omnia_env_check
+
+- name: Warn if omnia.env is not installed system-wide
+  ansible.builtin.debug:
+    msg: "{{ precheck_omnia_env_not_installed_msg }}"
+  when: not _omnia_env_check.stat.exists
+
+# =========================================================================
+# Step 2: Check repo_manager containers (Pulp + MinIO)
+# =========================================================================
+- name: Check repo_manager containers are running
+  ansible.builtin.command: "podman ps --filter name={{ item.name }} --format '{{ '{{' }}.Names{{ '}}' }}'"
+  register: _repo_mgr_container_checks
+  changed_when: false
+  failed_when: false
+  loop: "{{ repo_manager_containers }}"
+  loop_control:
+    label: "{{ item.name }}"
+
+# =========================================================================
+# Step 3: Check image_build_manager containers (Registry)
+# =========================================================================
+- name: Check image_build_manager containers are running
+  ansible.builtin.command: "podman ps --filter name={{ item.name }} --format '{{ '{{' }}.Names{{ '}}' }}'"
+  register: _img_build_container_checks
+  changed_when: false
+  failed_when: false
+  loop: "{{ image_build_manager_containers }}"
+  loop_control:
+    label: "{{ item.name }}"
+
+# =========================================================================
+# Step 4: Check orchestrator-related services
+# =========================================================================
+- name: Check if orchestrator output exists
+  ansible.builtin.stat:
+    path: "{{ omnia_data_path }}/orchestrator/output"
+  register: _orch_output_check
+
+# =========================================================================
+# Step 5: Check build_stream_config.yml exists
+# =========================================================================
+- name: Check build_stream_config.yml exists
+  ansible.builtin.stat:
+    path: "{{ bs_config_file }}"
+  register: _bs_config_check
+
+- name: Warn if build_stream_config.yml is missing
+  ansible.builtin.debug:
+    msg: "{{ precheck_config_missing_msg }}"
+  when: not _bs_config_check.stat.exists
+
+# =========================================================================
+# Step 6: Check build_stream_credentials.yml exists
+# =========================================================================
+- name: Check build_stream_credentials.yml exists
+  ansible.builtin.stat:
+    path: "{{ bs_credential_file }}"
+  register: _bs_cred_check
+
+- name: Warn if build_stream_credentials.yml is missing
+  ansible.builtin.debug:
+    msg: "{{ precheck_creds_missing_msg }}"
+  when: not _bs_cred_check.stat.exists
+
+# =========================================================================
+# Step 7: Build summary
+# =========================================================================
+- name: Build container check results
+  ansible.builtin.set_fact:
+    _all_container_checks: "{{ _repo_mgr_container_checks.results + _img_build_container_checks.results }}"
+
+- name: Identify missing containers
+  ansible.builtin.set_fact:
+    _missing_containers: >-
+      {{ _all_container_checks
+         | selectattr('stdout', 'equalto', '')
+         | map(attribute='item')
+         | map(attribute='name')
+         | list }}
+    _running_containers: >-
+      {{ _all_container_checks
+         | rejectattr('stdout', 'equalto', '')
+         | map(attribute='item')
+         | map(attribute='name')
+         | list }}
+
+- name: Warn if prepare-base containers are missing
+  ansible.builtin.debug:
+    msg: "{{ precheck_prepare_base_not_run_msg }}"
+  when: _missing_containers | length > 0
+
+# =========================================================================
+# Step 8: Print precheck summary
+# =========================================================================
+- name: Precheck summary
+  ansible.builtin.debug:
+    msg:
+      - "============================================"
+      - "  BUILD_STREAM PRECHECK SUMMARY"
+      - "============================================"
+      - "  omnia.env installed:         {{ _omnia_env_check.stat.exists | ternary('YES', 'NO (warning)') }}"
+      - "  ─── prepare-base containers ───"
+      - "  omnia_pulp (repo_mgr):       {{ ('omnia_pulp' in _running_containers) | ternary('RUNNING', 'NOT RUNNING (warning)') }}"
+      - "  omnia_minio (repo_mgr):      {{ ('omnia_minio' in _running_containers) | ternary('RUNNING', 'NOT RUNNING (warning)') }}"
+      - "  omnia_registry (img_build):   {{ ('omnia_registry' in _running_containers) | ternary('RUNNING', 'NOT RUNNING (warning)') }}"
+      - "  orchestrator output:          {{ _orch_output_check.stat.exists | ternary('present', 'MISSING (warning)') }}"
+      - "  ─── build_stream readiness ───"
+      - "  build_stream_config.yml:      {{ _bs_config_check.stat.exists | ternary('present', 'MISSING (warning)') }}"
+      - "  build_stream_credentials.yml: {{ _bs_cred_check.stat.exists | ternary('present', 'MISSING') }}"
+      - "  ─── Result ───"
+      - "  prepare-base containers:      {{ (_missing_containers | length == 0) | ternary('ALL RUNNING (' ~ _running_containers | length ~ '/' ~ _all_container_checks | length ~ ')', 'INCOMPLETE (' ~ _running_containers | length ~ '/' ~ _all_container_checks | length ~ ')') }}"
+      - "  Overall:                      {{ (_missing_containers | length == 0 and _bs_config_check.stat.exists) | ternary('PASS', 'WARN — review items above') }}"
+      - "============================================"

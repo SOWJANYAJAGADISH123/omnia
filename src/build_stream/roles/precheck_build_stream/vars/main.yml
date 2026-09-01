@@ -1,0 +1,55 @@
+# Copyright 2026 Dell Inc. or its subsidiaries. All Rights Reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+---
+# ============================================================================
+# precheck_build_stream — Role Variables
+# ============================================================================
+# Containers and services checked to verify that prepare-base has been run.
+
+# System env file installed by omnia.sh --setup-venv
+system_env_file: "/etc/omnia/omnia.env"
+
+# OMNIA_DATA_PATH (resolved from env or default)
+omnia_data_path: "{{ lookup('env', 'OMNIA_DATA_PATH') | default('/opt/omnia', true) }}"
+
+# --- Containers from repo_manager prepare ---
+repo_manager_containers:
+  - name: omnia_pulp
+    description: "Pulp content server (repo_manager)"
+  - name: omnia_minio
+    description: "MinIO object store (repo_manager)"
+
+# --- Containers from image_build_manager prepare ---
+image_build_manager_containers:
+  - name: omnia_registry
+    description: "Container image registry (image_build_manager)"
+
+# --- Credentials file paths ---
+bs_config_file: "{{ input_project_dir | default(omnia_data_path ~ '/build_stream/input/project_default') }}/build_stream_config.yml"
+bs_credential_file: "{{ input_project_dir | default(omnia_data_path ~ '/build_stream/input/project_default') }}/build_stream_credentials.yml"
+
+# --- Precheck messages ---
+precheck_omnia_env_not_installed_msg: >-
+  WARNING: omnia.env is not installed at {{ system_env_file }}.
+  Run 'omnia.sh --setup-venv' first.
+precheck_prepare_base_not_run_msg: >-
+  WARNING: --prepare-base does not appear to have been run.
+  Missing containers: {{ _missing_containers | join(', ') }}.
+  Run 'omnia.sh --prepare-base' before running build_stream.
+precheck_config_missing_msg: >-
+  WARNING: build_stream_config.yml not found at {{ bs_config_file }}.
+  Run 'omnia.sh --init' to stage input files.
+precheck_creds_missing_msg: >-
+  WARNING: build_stream_credentials.yml not found at {{ bs_credential_file }}.
+  Credentials have not been collected yet.
