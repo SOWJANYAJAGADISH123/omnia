@@ -81,10 +81,13 @@
 - name: Build Stream domain credential utility
   hosts: localhost
   connection: local
-  roles:
-    - credential_utility
-  when: not (skip_build_stream_credentials | default(false) | bool)
+  gather_facts: false
   tags: always
+  tasks:
+    - name: Run credential utility
+      ansible.builtin.include_role:
+        name: credential_utility
+      when: not (skip_build_stream_credentials | default(false) | bool)
 
 # =========================================================================
 # FLOW: precheck — Environment validation (opt-in only)
