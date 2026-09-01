@@ -23,11 +23,11 @@ omnia_project_name: "{{ lookup('env', 'OMNIA_PROJECT_NAME') | default('project_d
 
 # Containers that must be running (deployed by prepare-base)
 required_containers:
-  - name: omnia_pulp
+  - name: pulp
     domain: repo_manager
-  - name: omnia_minio
-    domain: repo_manager
-  - name: omnia_registry
+  - name: minio-server
+    domain: image_build_manager
+  - name: registry
     domain: image_build_manager
 
 # Credential files that must exist (created by credentials phase)
