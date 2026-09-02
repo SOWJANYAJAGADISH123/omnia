@@ -18,18 +18,19 @@
 # Usage (run ONE tag at a time — no comma-separated tags):
 #   cd src/build_stream/playbooks
 #   ansible-playbook build_stream.yml                        # Default: validate + credentials + prepare + execute
-#   ansible-playbook build_stream.yml --tags precheck        # Env + prepare-base precheck only
+#   ansible-playbook build_stream.yml --tags precheck        # Check containers + credentials present
 #   ansible-playbook build_stream.yml --tags validate        # Validate config only (no credentials)
 #   ansible-playbook build_stream.yml --tags credentials     # Collect/update credentials only
 #   ansible-playbook build_stream.yml --tags prepare         # Deploy Postgres + BSM + watcher only
 #   ansible-playbook build_stream.yml --tags execute         # Deploy GitLab + CI/CD only
-#   ansible-playbook build_stream.yml --tags cleanup         # Full cleanup (GitLab + BSM + Postgres)
+#   ansible-playbook build_stream.yml --tags build           # prepare + execute
+#   ansible-playbook build_stream.yml --tags cleanup         # Full cleanup (no credentials)
 #   ansible-playbook build_stream.yml --tags upgrade         # Upgrade flow (placeholder)
 #   ansible-playbook build_stream.yml --tags rollback        # Rollback flow (placeholder)
 #
 # Tags (mutually exclusive — pick ONE):
 #   (none)       — Default flow: setup + validate + credentials + prepare + execute
-#   precheck     — Environment precheck: checks prepare-base ran (containers running) — no credentials
+#   precheck     — Environment precheck (containers + credentials present) — no credentials
 #   validate     — Validate build_stream_config.yml only (skips credentials)
 #   credentials  — Collect/update BS auth, postgres, GitLab credentials only (no prepare/execute)
 #   prepare      — Deploy Postgres + BSM container + watcher service (with credentials)
@@ -39,23 +40,15 @@
 #   upgrade      — Upgrade flow (placeholder — future release)
 #   rollback     — Rollback flow (placeholder — future release)
 #
-# Tag Validation:
-#   - Invalid tags will fail with error message
-#   - Invalid combinations (e.g., prepare + cleanup) will fail
-#   - precheck, cleanup, and validate tags skip credential prompting
-#
 # Internal steps (always):
 #   Step 0: Setup — upgrade guard, load project config, input/output dirs, OIM metadata
-#   Step 1: Input validation (build_stream_config.yml schema + logic)
+#   Step 1: Input validation (build_stream_config.yml schema + logic) — skipped for precheck
 #   Step 2: Credential collection (skipped for precheck/cleanup/validate tags)
-#
-# Input contract:  see INPUT_CONTRACT.md
-# Output contract: see OUTPUT_CONTRACT.md
 
 # =========================================================================
-# Step 0: Setup — upgrade guard, input dirs, OIM metadata, tag validation
+# Step 0: Setup — load config, validate host, check prereqs
 # =========================================================================
-- name: Build Stream domain setup (upgrade guard + input dirs + OIM metadata)
+- name: Build Stream domain setup
   hosts: localhost
   connection: local
   gather_facts: false
@@ -64,13 +57,11 @@
     - build_stream_setup
 
 # =========================================================================
-# Step 1: Input validation — only during default (no tags) or --tags validate
+# Step 1: Input validation (schema + logic) — skipped for precheck
 # =========================================================================
 - name: Validate build_stream configuration
   ansible.builtin.import_playbook: validate/validate_build_stream_config.yml
-  when: >-
-    (hostvars['localhost']['provided_tags'] | default([]) | length == 0)
-    or 'validate' in (hostvars['localhost']['provided_tags'] | default([]))
+  when: "'precheck' not in (hostvars['localhost']['provided_tags'] | default([]))"
   tags:
     - always
     - validate
@@ -125,8 +116,16 @@
 
 # =========================================================================
 # FLOW: cleanup — Full domain cleanup (opt-in only)
+# Step 1: GitLab cleanup (credentials + remote gitlab_server)
+# Step 2: BSM + Postgres + NFS cleanup (local oim host)
 # =========================================================================
-- name: Cleanup build_stream domain
+- name: Cleanup GitLab deployment
+  ansible.builtin.import_playbook: cleanup/cleanup_gitlab.yml
+  tags:
+    - never
+    - cleanup
+
+- name: Cleanup BuildStream infrastructure
   ansible.builtin.import_playbook: cleanup/cleanup_build_stream.yml
   tags:
     - never
