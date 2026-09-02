@@ -43,6 +43,9 @@
   hosts: localhost
   connection: local
   gather_facts: false
+  tags:
+    - never
+    - cleanup
   roles:
     - role: ../../roles/build_stream_setup
       vars:
@@ -52,5 +55,8 @@
 - name: BuildStream domain cleanup (container, postgres, NFS)
   hosts: oim
   gather_facts: true
+  tags:
+    - never
+    - cleanup
   roles:
     - cleanup_build_stream

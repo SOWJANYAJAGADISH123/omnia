@@ -20,6 +20,9 @@
 - name: Set_fact for fetch omnia config credentials
   hosts: localhost
   connection: local
+  tags:
+    - never
+    - cleanup
   tasks:
     - name: Set dynamic run tags including 'gitlab'
       when: not config_file_status | default(false) | bool
@@ -31,6 +34,9 @@
   hosts: localhost
   connection: local
   gather_facts: false
+  tags:
+    - never
+    - cleanup
   roles:
     - role: ../../roles/build_stream_setup
       when: not build_stream_setup_done | default(false) | bool
@@ -39,6 +45,9 @@
   hosts: localhost
   connection: local
   gather_facts: false
+  tags:
+    - never
+    - cleanup
   tasks:
     - name: Load build_stream credential paths
       ansible.builtin.include_vars:
@@ -59,6 +68,9 @@
 - name: Prepare GitLab host credentials for cleanup
   hosts: localhost
   gather_facts: false
+  tags:
+    - never
+    - cleanup
   tasks:
     - name: Load BuildStream configuration inputs
       ansible.builtin.include_vars:
@@ -94,6 +106,9 @@
   hosts: gitlab_server
   become: true
   gather_facts: true
+  tags:
+    - never
+    - cleanup
   pre_tasks:
     - name: Load BuildStream configuration inputs
       ansible.builtin.include_vars:

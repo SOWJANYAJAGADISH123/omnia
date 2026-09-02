@@ -64,13 +64,13 @@
     - build_stream_setup
 
 # =========================================================================
-# Step 1: Input validation — skipped for precheck
+# Step 1: Input validation — only during default (no tags) or --tags validate
 # =========================================================================
 - name: Validate build_stream configuration
   ansible.builtin.import_playbook: validate/validate_build_stream_config.yml
   when: >-
-    'precheck' not in (hostvars['localhost']['provided_tags'] | default([]))
-    and 'cleanup' not in (hostvars['localhost']['provided_tags'] | default([]))
+    (hostvars['localhost']['provided_tags'] | default([]) | length == 0)
+    or 'validate' in (hostvars['localhost']['provided_tags'] | default([]))
   tags:
     - always
     - validate
