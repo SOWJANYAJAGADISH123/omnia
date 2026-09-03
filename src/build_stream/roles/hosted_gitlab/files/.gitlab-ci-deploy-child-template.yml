@@ -398,12 +398,15 @@ deploy:
       - status_response.json
 
 # ---------------------------------------------------------------------------
-# Restart stage -- marks restart as complete via BSM API
+# Restart stage -- PXE boot nodes and run BSM post-processing
 # Runs automatically after deploy completes
 #
-# NOTE (Omnia 2.3+): The restart stage invokes orchestrator.yml --tags pxeboot
-# to perform PXE boot on provisioned nodes.  The playbook execution is
-# asynchronous - this stage polls for completion.
+# NOTE (Omnia 2.3+): The restart stage submits restart_build_stream.yml which:
+#   1. Invokes orchestrator --tags pxeboot (PXE boot + phone-home)
+#   2. Reads orchestrator output (orchestrator_status.yml, failed_nodes.json)
+#   3. Writes node_results.json and updates restart_state.json
+#   4. Uploads failed_nodes.json to GitLab
+# The playbook execution is asynchronous - this stage polls for completion.
 #
 # Can be skipped for VM deployments by setting SKIP_RESTART=true
 # ---------------------------------------------------------------------------
@@ -416,7 +419,7 @@ restart:
     - |
       echo "============================================================"
       echo "  RESTART STAGE"
-      echo "  (Invokes orchestrator.yml --tags pxeboot)"
+      echo "  (PXE boot + BSM post-processing)"
       echo "============================================================"
       echo ""
       echo "  Job ID:         ${JOB_ID}"
@@ -518,7 +521,7 @@ restart:
 
       jq "." restart_response.json 2>/dev/null || cat restart_response.json
       echo ""
-      echo "  [OK] Restart request accepted (orchestrator.yml --tags pxeboot)"
+      echo "  [OK] Restart request accepted (restart_build_stream.yml)"
       echo ""
 
       # Poll for restart completion

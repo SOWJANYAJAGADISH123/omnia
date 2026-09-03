@@ -63,7 +63,8 @@ def _build_error_response(
     summary="Trigger restart stage",
     description=(
         "Triggers PXE-based node restart for the deployed Image Group. "
-        "Executes utils/set_pxe_boot.yml via the playbook queue. "
+        "Executes restart_build_stream.yml via the playbook queue which "
+        "invokes orchestrator --tags pxeboot and runs BSM post-processing. "
         "Handles node diffs: only newly added nodes are PXE booted."
     ),
     responses={

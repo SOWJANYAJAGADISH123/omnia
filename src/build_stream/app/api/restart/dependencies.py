@@ -41,8 +41,9 @@ def get_create_restart_use_case(
 ) -> CreateRestartUseCase:
     """Provide create restart use case with shared session in prod.
 
-    The restart stage now submits ``orchestrator.yml --tags pxe_boot`` to
-    the NFS playbook queue instead of completing the stage immediately.
+    The restart stage submits ``restart_build_stream.yml`` to the NFS
+    playbook queue.  This playbook invokes orchestrator ``--tags pxeboot``
+    and then runs pxe_buildstream_manager post-processing.
     """
     container = _get_container()
     queue_service = container.playbook_queue_request_service()
