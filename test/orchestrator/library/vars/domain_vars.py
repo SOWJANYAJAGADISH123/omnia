@@ -30,6 +30,7 @@ FVT_TAGS: list[str] = [
     "prepare",
     "provision",
     "pxeboot",
+    "reboot",
     "cleanup",
 ]
 
@@ -77,6 +78,9 @@ MARKERS: list[str] = [
     "ipoib",
     "fault_injection",
     "reprovision",
+    "node_remove",
+    "node_add",
+    "token_renew",
 ]
 
 # =====================================================================
@@ -100,6 +104,7 @@ SUITES: dict[str, list[str]] = {
     "provision": [
         "openchami",
     ],
+    "reboot": [],
     "pxeboot": [
         "connectivity",
         "cloudinit",
@@ -125,6 +130,7 @@ SUITES: dict[str, list[str]] = {
         "kubernetes_recovery",
         "slurm_recovery",
         "slurm_lifecycle",
+        "kubernetes_lifecycle",
         "ipoib_network",
         "ipoib_resilience",
     ],
@@ -135,6 +141,7 @@ SUITES: dict[str, list[str]] = {
         "kubernetes",
         "artifacts",
         "credentials",
+        "nfs_shares",
     ],
 }
 

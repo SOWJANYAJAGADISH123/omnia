@@ -242,6 +242,10 @@ TEST_CASES = {
         "id": "TEL_FVT_DEPLOY_V028",
         "title": "Verify latest LDMS data in Kafka topic",
     },
+    "ldms_vm_data": {
+        "id": "TEL_FVT_DEPLOY_V029",
+        "title": "Verify LDMS metrics in VictoriaMetrics",
+    },
     # -- Sources: PowerScale ------------------------------------------------
     "powerscale_csm_deploy": {
         "id": "TEL_FVT_DEPLOY_V030",
@@ -850,6 +854,10 @@ TEST_CASES = {
     "short_form_detection_logic": {
         "id": "TEL_UT_CLEANUP_V062",
         "title": "UT: Short-form detection logic",
+    },
+    "deploy_full_playbook": {
+        "id": "TEL_FVT_FULL_PLAYBOOK_E001",
+        "title": "Deploy telemetry (complete playbook, no tags)",
     },
 }
 
